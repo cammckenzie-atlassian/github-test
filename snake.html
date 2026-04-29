@@ -189,6 +189,7 @@
     <div class="leg"><div class="dot" style="background:#ffcc00"></div>⚡ Speed Boost</div>
     <div class="leg"><div class="dot" style="background:#cc44ff"></div>✦ Score ×2</div>
     <div class="leg"><div class="dot" style="background:#00ccff"></div>✂ Shrink</div>
+    <div class="leg"><div class="dot" style="background:#ff9900"></div>🍼 Baby Snake</div>
     <div class="leg"><div class="dot" style="background:#4a5a4a"></div>Obstacle</div>
 </div>
 
@@ -226,6 +227,7 @@ let snake, dir, nextDir;
 let food, obstacles, powerups;
 let score, multiplier, multTimer, boostTimer;
 let speedLevel, gameLoop;
+let babySnake = null; // { segs: [{x,y}], dir: {x,y}, startTime: ms }
 let state = 'idle'; // idle | running | paused | over
 
 // ─────────────────────────────────────────────
@@ -242,6 +244,7 @@ function buildOccupiedSet(includeFood = true) {
     const s = new Set(snake.map(p => key(p.x, p.y)));
     obstacles.forEach(o => s.add(key(o.x, o.y)));
     powerups.forEach(p => s.add(key(p.x, p.y)));
+    if (babySnake) babySnake.segs.forEach(p => s.add(key(p.x, p.y)));
     if (includeFood && food) s.add(key(food.x, food.y));
     return s;
 }
@@ -272,6 +275,7 @@ function initGame() {
     boostTimer = 0;
     speedLevel = 0;
     powerups   = [];
+    babySnake  = null;
     obstacles  = spawnObstacles();
     food       = spawnFood();
     updateHUD();
@@ -298,7 +302,7 @@ function spawnFood() {
 function trySpawnPowerup() {
     if (powerups.length >= 2) return;
     if (Math.random() > PU_SPAWN_CHANCE) return;
-    const types = ['speed', 'multi', 'shrink'];
+    const types = ['speed', 'multi', 'shrink', 'baby'];
     const type  = types[Math.floor(Math.random() * types.length)];
     const cell  = randomFreeCell(buildOccupiedSet());
     powerups.push({ ...cell, type, ttl: PU_TTL });
@@ -349,6 +353,9 @@ function tick() {
         activatePowerup(pu.type);
     }
 
+    // Tick baby snake
+    if (babySnake) tickBabySnake();
+
     updateHUD();
     draw();
 }
@@ -362,11 +369,85 @@ function activatePowerup(type) {
         multiplier = 2;
         multTimer  = 100;
         toast('✦ Score ×2 active!', '#cc44ff');
-    } else {
+    } else if (type === 'shrink') {
         const cut = Math.max(1, Math.floor(snake.length / 3));
         snake.splice(snake.length - cut);
         toast('✂ Snake shrunk!', '#00ccff');
+    } else if (type === 'baby') {
+        spawnBabySnake();
+        toast('🍼 Baby snake is collecting for you!', '#ff9900');
     }
+}
+
+// ─────────────────────────────────────────────
+//  Baby Snake
+// ─────────────────────────────────────────────
+function spawnBabySnake() {
+    // Pick a start cell well away from the main snake head
+    const occ = buildOccupiedSet();
+    let start, attempts = 0;
+    do {
+        start = randomFreeCell(occ);
+        attempts++;
+    } while (attempts < 80 && Math.abs(start.x - snake[0].x) + Math.abs(start.y - snake[0].y) < 6);
+
+    const dirs = [{ x:1,y:0 },{ x:-1,y:0 },{ x:0,y:1 },{ x:0,y:-1 }];
+    const startDir = dirs[Math.floor(Math.random() * dirs.length)];
+    babySnake = {
+        segs: [start, { x: start.x - startDir.x, y: start.y - startDir.y }],
+        dir:  startDir,
+        startTime: Date.now(),
+    };
+}
+
+function tickBabySnake() {
+    const elapsed = Date.now() - babySnake.startTime;
+    if (elapsed >= 10000) { babySnake = null; return; }
+
+    const nd = babyNextDir();
+    if (!nd) { babySnake = null; return; }
+
+    babySnake.dir = nd;
+    const newHead = { x: babySnake.segs[0].x + nd.x, y: babySnake.segs[0].y + nd.y };
+    babySnake.segs.unshift(newHead);
+
+    if (newHead.x === food.x && newHead.y === food.y) {
+        score += 1 * multiplier;
+        food = spawnFood();
+        const newLevel = Math.floor(score / POINTS_PER_LEVEL);
+        if (newLevel > speedLevel) { speedLevel = newLevel; restartLoop(); }
+        // Keep length on eat (baby grows a little)
+    } else {
+        babySnake.segs.pop();
+    }
+}
+
+function babyNextDir() {
+    const head = babySnake.segs[0];
+    const bdir = babySnake.dir;
+    const allDirs = [{ x:0,y:-1 },{ x:0,y:1 },{ x:-1,y:0 },{ x:1,y:0 }];
+
+    const valid = allDirs.filter(d => {
+        const nx = head.x + d.x, ny = head.y + d.y;
+        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return false;
+        if (obstacles.some(o => o.x === nx && o.y === ny)) return false;
+        // Avoid own body (all but tail, which will vacate)
+        if (babySnake.segs.slice(0, -1).some(s => s.x === nx && s.y === ny)) return false;
+        return true;
+    });
+
+    if (!valid.length) return null;
+
+    // Sort: prefer moving toward food
+    valid.sort((a, b) => {
+        const da = Math.abs(head.x + a.x - food.x) + Math.abs(head.y + a.y - food.y);
+        const db = Math.abs(head.x + b.x - food.x) + Math.abs(head.y + b.y - food.y);
+        return da - db;
+    });
+
+    // Avoid reversing unless forced
+    const noRev = valid.filter(d => !(d.x === -bdir.x && d.y === -bdir.y));
+    return noRev.length ? noRev[0] : valid[0];
 }
 
 let toastTimeout;
@@ -436,7 +517,8 @@ function draw() {
         let bg, emoji;
         if (p.type === 'speed') { bg = '#ffcc00'; emoji = '⚡'; }
         else if (p.type === 'multi') { bg = '#cc44ff'; emoji = '✦'; }
-        else { bg = '#00ccff'; emoji = '✂'; }
+        else if (p.type === 'shrink') { bg = '#00ccff'; emoji = '✂'; }
+        else { bg = '#ff9900'; emoji = '🍼'; }
 
         ctx.fillStyle = bg;
         ctx.shadowColor = bg;
@@ -470,6 +552,35 @@ function draw() {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     });
+
+    // Baby snake
+    if (babySnake) {
+        const elapsed  = Date.now() - babySnake.startTime;
+        const remaining = 1 - elapsed / 10000;
+        // Flash in last 2 seconds
+        const flash = elapsed > 8000 ? (Math.floor(elapsed / 200) % 2 === 0) : true;
+
+        if (flash) {
+            babySnake.segs.forEach((seg, i) => {
+                const isHead = i === 0;
+                ctx.globalAlpha = isHead ? Math.max(0.5, remaining) : Math.max(0.25, remaining * 0.65);
+                ctx.fillStyle   = isHead ? '#ffcc44' : '#ff9900';
+                if (isHead) { ctx.shadowColor = '#ffcc44'; ctx.shadowBlur = 12; }
+                rr(seg.x*CELL+2, seg.y*CELL+2, CELL-4, CELL-4, isHead ? 5 : 3);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        // Timer bar above baby head
+        const headSeg = babySnake.segs[0];
+        const barW = CELL - 4;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(headSeg.x*CELL + 2, headSeg.y*CELL - 5, barW, 3);
+        ctx.fillStyle = remaining > 0.3 ? '#ff9900' : '#ff3333';
+        ctx.fillRect(headSeg.x*CELL + 2, headSeg.y*CELL - 5, barW * remaining, 3);
+    }
 
     // Multiplier badge
     if (multiplier > 1) {
