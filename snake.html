@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐍 Neon Snake</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a1a;
+    color: #e0e0ff;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  h1 {
+    font-size: 2.2rem;
+    color: #00ffcc;
+    text-shadow: 0 0 12px #00ffcc, 0 0 30px #00ffcc88;
+    margin-bottom: 6px;
+    letter-spacing: 4px;
+  }
+
+  #tagline {
+    color: #7777aa;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+  }
+
+  #game-wrapper {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  #canvas-container {
+    position: relative;
+  }
+
+  canvas {
+    display: block;
+    border: 2px solid #00ffcc44;
+    box-shadow: 0 0 24px #00ffcc33, inset 0 0 40px #00001a;
+    background: #050510;
+  }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5, 5, 20, 0.88);
+    gap: 12px;
+  }
+
+  #overlay h2 {
+    font-size: 2rem;
+    color: #ff4488;
+    text-shadow: 0 0 16px #ff4488;
+    letter-spacing: 3px;
+  }
+
+  #overlay .score-display {
+    color: #00ffcc;
+    font-size: 1.1rem;
+  }
+
+  #overlay button {
+    margin-top: 8px;
+    padding: 10px 32px;
+    background: transparent;
+    border: 2px solid #00ffcc;
+    color: #00ffcc;
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    text-shadow: 0 0 8px #00ffcc;
+    box-shadow: 0 0 12px #00ffcc44;
+    transition: all 0.2s;
+  }
+
+  #overlay button:hover {
+    background: #00ffcc22;
+    box-shadow: 0 0 20px #00ffcc88;
+  }
+
+  #start-msg {
+    color: #aaaacc;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+  }
+
+  /* Side panel */
+  #side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 200px;
+  }
+
+  .panel-box {
+    border: 1px solid #00ffcc33;
+    padding: 14px 16px;
+    background: #0a0a20;
+    box-shadow: 0 0 12px #00ffcc11;
+  }
+
+  .panel-box h3 {
+    color: #00ffcc;
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px #00ffcc88;
+  }
+
+  #score-val {
+    font-size: 2.2rem;
+    color: #ffffff;
+    text-shadow: 0 0 10px #ffffff88;
+  }
+
+  #level-val {
+    font-size: 1.1rem;
+    color: #ffcc00;
+    text-shadow: 0 0 8px #ffcc0088;
+    margin-top: 4px;
+  }
+
+  #powerup-status {
+    min-height: 24px;
+    font-size: 0.9rem;
+    color: #ff88ff;
+    text-shadow: 0 0 8px #ff88ff88;
+  }
+
+  /* High score list */
+  #hs-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  #hs-list li {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #aaaacc;
+    border-bottom: 1px solid #ffffff11;
+    padding-bottom: 4px;
+  }
+
+  #hs-list li.gold   { color: #ffdd44; text-shadow: 0 0 6px #ffdd4488; }
+  #hs-list li.silver { color: #ccccdd; }
+  #hs-list li.bronze { color: #ffaa66; }
+
+  .hs-rank { width: 20px; }
+  .hs-score { color: #00ffcc; font-weight: bold; }
+
+  /* Legend */
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: #8888bb;
+    margin-bottom: 4px;
+  }
+
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Controls hint */
+  #controls-hint {
+    color: #555577;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<h1>NEON SNAKE</h1>
+<div id="tagline">// ENDLESS MODE · POWER-UPS · SPEED BOOST //</div>
+
+<div id="game-wrapper">
+  <div id="canvas-container">
+    <canvas id="canvas" width="480" height="480"></canvas>
+    <div id="overlay">
+      <h2 id="overlay-title">NEON SNAKE</h2>
+      <div class="score-display" id="overlay-score"></div>
+      <button id="overlay-btn">[ START ]</button>
+      <div id="start-msg">ARROW KEYS or WASD to move</div>
+    </div>
+  </div>
+
+  <div id="side-panel">
+    <div class="panel-box">
+      <h3>Score</h3>
+      <div id="score-val">0</div>
+      <div id="level-val">LVL 1</div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Power-Up</h3>
+      <div id="powerup-status">—</div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Top Scores</h3>
+      <ul id="hs-list"></ul>
+    </div>
+
+    <div class="panel-box">
+      <h3>Legend</h3>
+      <div class="legend-row"><div class="legend-dot" style="background:#ff3366;box-shadow:0 0 6px #ff3366"></div>Food (+10 pts)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#ffcc00;box-shadow:0 0 6px #ffcc00"></div>Speed Boost (+5 pts)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#aa44ff;box-shadow:0 0 6px #aa44ff"></div>Ghost (+15 pts)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#00ccff;box-shadow:0 0 6px #00ccff"></div>Slow-Mo (+5 pts)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#ff8800;box-shadow:0 0 6px #ff8800"></div>x2 Score (+0 pts)</div>
+    </div>
+  </div>
+</div>
+
+<div id="controls-hint">↑ ↓ ← → or W A S D &nbsp;·&nbsp; ESC to pause</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const COLS = 24, ROWS = 24;
+const CELL = canvas.width / COLS;
+
+// --- State ---
+let snake, dir, nextDir, food, items, score, level, baseInterval;
+let gameLoop, running, paused, dead;
+let powerupTimer = 0, powerupType = null;
+let doubleScore = false, ghostMode = false, slowMo = false;
+
+// High scores stored in localStorage
+function getHighScores() {
+  try { return JSON.parse(localStorage.getItem('neon_snake_hs') || '[]'); }
+  catch { return []; }
+}
+function saveHighScore(s) {
+  let hs = getHighScores();
+  hs.push(s);
+  hs.sort((a,b)=>b-a);
+  hs = hs.slice(0,8);
+  localStorage.setItem('neon_snake_hs', JSON.stringify(hs));
+}
+function renderHighScores() {
+  const hs = getHighScores();
+  const list = document.getElementById('hs-list');
+  list.innerHTML = '';
+  if (hs.length === 0) {
+    list.innerHTML = '<li style="color:#555577;font-size:0.78rem">No scores yet</li>';
+    return;
+  }
+  const medals = ['gold','silver','bronze'];
+  hs.forEach((s,i) => {
+    const li = document.createElement('li');
+    if (medals[i]) li.className = medals[i];
+    li.innerHTML = `<span class="hs-rank">#${i+1}</span><span class="hs-name">&nbsp;</span><span class="hs-score">${s}</span>`;
+    list.appendChild(li);
+  });
+}
+
+// --- Init ---
+function initGame() {
+  const mid = Math.floor(ROWS/2);
+  snake = [
+    {x:mid+1, y:mid}, {x:mid, y:mid}, {x:mid-1, y:mid}
+  ];
+  dir = {x:1,y:0};
+  nextDir = {x:1,y:0};
+  score = 0;
+  level = 1;
+  baseInterval = 150;
+  items = [];
+  powerupTimer = 0; powerupType = null;
+  doubleScore = false; ghostMode = false; slowMo = false;
+  spawnFood();
+  updateUI();
+}
+
+function randomCell(excludes=[]) {
+  let pos;
+  let tries = 0;
+  do {
+    pos = {x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS)};
+    tries++;
+  } while (tries < 200 && (
+    excludes.some(e => e.x===pos.x && e.y===pos.y) ||
+    snake.some(s => s.x===pos.x && s.y===pos.y)
+  ));
+  return pos;
+}
+
+function spawnFood() {
+  food = {type:'food', ...randomCell([...items])};
+}
+
+const ITEM_TYPES = [
+  {type:'speed',  color:'#ffcc00', glow:'#ffcc00', label:'SPEED BOOST',  pts:5,  duration:4000},
+  {type:'ghost',  color:'#aa44ff', glow:'#aa44ff', label:'GHOST MODE',   pts:15, duration:5000},
+  {type:'slowmo', color:'#00ccff', glow:'#00ccff', label:'SLOW-MO',      pts:5,  duration:4000},
+  {type:'x2',     color:'#ff8800', glow:'#ff8800', label:'x2 SCORE',     pts:0,  duration:6000},
+];
+
+function maybeSpawnItem() {
+  if (items.length < 2 && Math.random() < 0.18) {
+    const t = ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)];
+    items.push({...t, ...randomCell([food, ...items]), spawnScore: score});
+  }
+  // Expire items that have been around too long
+  items = items.filter(it => score - it.spawnScore < 80);
+}
+
+function updateUI() {
+  document.getElementById('score-val').textContent = score;
+  document.getElementById('level-val').textContent = `LVL ${level}`;
+  const pu = document.getElementById('powerup-status');
+  if (powerupType) {
+    const secs = (powerupTimer/1000).toFixed(1);
+    pu.textContent = `${powerupType.label} (${secs}s)`;
+    pu.style.color = powerupType.color;
+    pu.style.textShadow = `0 0 8px ${powerupType.glow}88`;
+  } else {
+    pu.textContent = '—';
+    pu.style.color = '#ff88ff';
+    pu.style.textShadow = '0 0 8px #ff88ff88';
+  }
+}
+
+// --- Game tick ---
+function tick() {
+  dir = {...nextDir};
+  const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+
+  // Wall collision (wrap in ghost, die otherwise)
+  if (ghostMode) {
+    head.x = (head.x + COLS) % COLS;
+    head.y = (head.y + ROWS) % ROWS;
+  } else {
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) { endGame(); return; }
+  }
+
+  // Self collision (ghost ignores it)
+  if (!ghostMode && snake.some(s => s.x===head.x && s.y===head.y)) { endGame(); return; }
+
+  snake.unshift(head);
+
+  let grew = false;
+
+  // Food collision
+  if (head.x===food.x && head.y===food.y) {
+    const pts = 10 * (doubleScore ? 2 : 1);
+    score += pts;
+    grew = true;
+    maybeSpawnItem();
+    spawnFood();
+    // Level up every 50 pts
+    level = Math.floor(score/50)+1;
+  }
+
+  // Item collision
+  for (let i = items.length-1; i >= 0; i--) {
+    const it = items[i];
+    if (head.x===it.x && head.y===it.y) {
+      const pts = it.pts * (doubleScore ? 2 : 1);
+      score += pts;
+      grew = true;
+      activatePowerup(it);
+      items.splice(i,1);
+    }
+  }
+
+  if (!grew) snake.pop();
+
+  updateUI();
+  draw();
+}
+
+function activatePowerup(it) {
+  // Clear existing
+  powerupType = it;
+  powerupTimer = it.duration;
+  doubleScore = it.type === 'x2';
+  ghostMode   = it.type === 'ghost';
+  slowMo      = it.type === 'slowmo';
+  if (it.type === 'speed') {
+    rescheduleLoop(getInterval() * 0.5);
+  }
+}
+
+function tickPowerup(dt) {
+  if (!powerupType) return;
+  powerupTimer -= dt;
+  if (powerupTimer <= 0) {
+    if (powerupType.type === 'speed') rescheduleLoop(getInterval());
+    powerupType = null;
+    doubleScore = false;
+    ghostMode   = false;
+    slowMo      = false;
+  }
+}
+
+function getInterval() {
+  const speed = Math.max(60, baseInterval - (level-1)*8);
+  return slowMo ? speed * 1.8 : speed;
+}
+
+let lastTick = 0;
+function rescheduleLoop(interval) {
+  if (gameLoop) clearInterval(gameLoop);
+  gameLoop = setInterval(() => {
+    if (!paused && !dead) {
+      const now = Date.now();
+      tickPowerup(now - lastTick);
+      lastTick = now;
+      tick();
+    }
+  }, interval);
+}
+
+// --- Draw ---
+const SNAKE_HEAD_COLOR = '#00ffcc';
+const SNAKE_BODY_COLOR = '#00cc99';
+const SNAKE_GHOST_COLOR = '#6644aa';
+const FOOD_COLOR = '#ff3366';
+
+function drawGlowRect(x, y, w, h, color, blur=10, alpha=1) {
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+
+function draw() {
+  // Background
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid dots
+  ctx.fillStyle = '#0d0d28';
+  for (let r=0; r<ROWS; r++) for (let c=0; c<COLS; c++) {
+    ctx.fillRect(c*CELL+CELL/2-1, r*CELL+CELL/2-1, 2, 2);
+  }
+
+  // Food
+  drawGlowRect(food.x*CELL+2, food.y*CELL+2, CELL-4, CELL-4, FOOD_COLOR, 14);
+
+  // Items
+  for (const it of items) {
+    const pulse = 0.7 + 0.3*Math.sin(Date.now()/200);
+    drawGlowRect(it.x*CELL+2, it.y*CELL+2, CELL-4, CELL-4, it.color, 14, pulse);
+    // inner symbol
+    ctx.save();
+    ctx.font = `bold ${CELL*0.55}px Courier New`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = pulse;
+    const sym = {speed:'⚡',ghost:'👻',slowmo:'❄',x2:'×2'}[it.type] || '?';
+    ctx.fillText(sym, it.x*CELL+CELL/2, it.y*CELL+CELL/2);
+    ctx.restore();
+  }
+
+  // Snake
+  const ghostAlpha = ghostMode ? 0.5 : 1.0;
+  snake.forEach((seg, i) => {
+    const isHead = i === 0;
+    const color = ghostMode ? SNAKE_GHOST_COLOR : (isHead ? SNAKE_HEAD_COLOR : SNAKE_BODY_COLOR);
+    const pad = isHead ? 1 : 2;
+    drawGlowRect(seg.x*CELL+pad, seg.y*CELL+pad, CELL-pad*2, CELL-pad*2, color, isHead?16:8, ghostAlpha);
+    // eye on head
+    if (isHead) {
+      ctx.save();
+      ctx.fillStyle = '#0a0a1a';
+      ctx.globalAlpha = 1;
+      const eyeSize = 3;
+      const ex = seg.x*CELL + CELL/2 + dir.x*4 + dir.y*3;
+      const ey = seg.y*CELL + CELL/2 + dir.y*4 + dir.x*3;
+      const ex2 = seg.x*CELL + CELL/2 + dir.x*4 - dir.y*3;
+      const ey2 = seg.y*CELL + CELL/2 + dir.y*4 - dir.x*3;
+      ctx.beginPath(); ctx.arc(ex,ey,eyeSize,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex2,ey2,eyeSize,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  });
+
+  // Powerup HUD bar
+  if (powerupType && powerupTimer > 0) {
+    const barW = canvas.width - 16;
+    const frac = Math.max(0, powerupTimer / powerupType.duration);
+    ctx.fillStyle = '#1a1a30';
+    ctx.fillRect(8, canvas.height-10, barW, 4);
+    ctx.save();
+    ctx.shadowColor = powerupType.color;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = powerupType.color;
+    ctx.fillRect(8, canvas.height-10, barW*frac, 4);
+    ctx.restore();
+  }
+}
+
+// --- End game ---
+function endGame() {
+  dead = true;
+  clearInterval(gameLoop);
+  saveHighScore(score);
+  renderHighScores();
+
+  const overlay = document.getElementById('overlay');
+  document.getElementById('overlay-title').textContent = 'GAME OVER';
+  document.getElementById('overlay-title').style.color = '#ff4488';
+  document.getElementById('overlay-score').textContent = `SCORE: ${score}  ·  LVL ${level}`;
+  document.getElementById('overlay-btn').textContent = '[ PLAY AGAIN ]';
+  document.getElementById('start-msg').textContent = 'Press ENTER or click to restart';
+  overlay.style.display = 'flex';
+}
+
+// --- Controls ---
+const dirMap = {
+  ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0},
+  w:{x:0,y:-1}, s:{x:0,y:1}, a:{x:-1,y:0}, d:{x:1,y:0},
+  W:{x:0,y:-1}, S:{x:0,y:1}, A:{x:-1,y:0}, D:{x:1,y:0},
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!dead && running) togglePause();
+    return;
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && !running) {
+    startGame(); return;
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && dead) {
+    startGame(); return;
+  }
+  const d = dirMap[e.key];
+  if (d && !(d.x===-dir.x && d.y===-dir.y)) {
+    nextDir = d;
+    e.preventDefault();
+  }
+});
+
+document.getElementById('overlay-btn').addEventListener('click', startGame);
+
+function togglePause() {
+  paused = !paused;
+  if (paused) {
+    document.getElementById('overlay-title').textContent = 'PAUSED';
+    document.getElementById('overlay-title').style.color = '#ffcc00';
+    document.getElementById('overlay-score').textContent = `SCORE: ${score}`;
+    document.getElementById('overlay-btn').textContent = '[ RESUME ]';
+    document.getElementById('start-msg').textContent = 'Press ESC or click to resume';
+    document.getElementById('overlay').style.display = 'flex';
+  } else {
+    document.getElementById('overlay').style.display = 'none';
+  }
+}
+
+function startGame() {
+  dead = false; paused = false; running = true;
+  initGame();
+  document.getElementById('overlay').style.display = 'none';
+  lastTick = Date.now();
+  rescheduleLoop(getInterval());
+}
+
+// Init display
+renderHighScores();
+draw();
+</script>
+</body>
+</html>
