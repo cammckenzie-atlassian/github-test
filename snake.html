@@ -7,20 +7,59 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        :root {
+            --page-bg:      #0d0d0d;
+            --page-text:    #e0e0e0;
+            --hud-bg:       #161616;
+            --hud-border:   #2a2a2a;
+            --hud-text:     #888;
+            --hud-val:      #00cc44;
+            --canvas-border:#00cc44;
+            --canvas-glow:  #00cc4433;
+            --legend-text:  #666;
+            --hint-text:    #444;
+            --overlay-bg:   rgba(0,0,0,0.88);
+            --overlay-h:    #00cc44;
+            --overlay-sub:  #777;
+            --lb-h:         #00cc44;
+            --lb-text:      #999;
+            --lb-hi:        #00cc44;
+        }
+
+        body.light {
+            --page-bg:      #f2f7f2;
+            --page-text:    #1a2a1a;
+            --hud-bg:       #ffffff;
+            --hud-border:   #ccdacc;
+            --hud-text:     #557755;
+            --hud-val:      #008822;
+            --canvas-border:#009933;
+            --canvas-glow:  #00993322;
+            --legend-text:  #446644;
+            --hint-text:    #668866;
+            --overlay-bg:   rgba(235,248,235,0.93);
+            --overlay-h:    #007722;
+            --overlay-sub:  #448844;
+            --lb-h:         #007722;
+            --lb-text:      #446644;
+            --lb-hi:        #007722;
+        }
+
         body {
-            background: #0d0d0d;
-            color: #e0e0e0;
+            background: var(--page-bg);
+            color: var(--page-text);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
             padding: 20px;
+            transition: background 0.3s, color 0.3s;
         }
 
         h1 {
             font-size: 2.2rem;
-            color: #00cc44;
+            color: var(--hud-val);
             margin-bottom: 12px;
             text-shadow: 0 0 14px #00cc4466;
             letter-spacing: 2px;
@@ -30,22 +69,37 @@
             display: flex;
             gap: 12px;
             margin-bottom: 12px;
+            align-items: center;
         }
 
         .hud-item {
-            background: #161616;
+            background: var(--hud-bg);
             padding: 6px 18px;
             border-radius: 8px;
-            border: 1px solid #2a2a2a;
+            border: 1px solid var(--hud-border);
             font-size: 0.9rem;
-            color: #888;
+            color: var(--hud-text);
+            transition: background 0.3s, border-color 0.3s;
         }
 
         .hud-item span {
-            color: #00cc44;
+            color: var(--hud-val);
             font-weight: bold;
             font-size: 1rem;
         }
+
+        #theme-toggle {
+            background: var(--hud-bg);
+            color: var(--hud-text);
+            border: 1px solid var(--hud-border);
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            cursor: pointer;
+            transition: background 0.3s, color 0.3s, border-color 0.3s;
+            white-space: nowrap;
+        }
+        #theme-toggle:hover { opacity: 0.8; }
 
         #canvas-wrapper {
             position: relative;
@@ -53,52 +107,54 @@
 
         canvas {
             display: block;
-            border: 2px solid #00cc44;
-            box-shadow: 0 0 24px #00cc4433;
+            border: 2px solid var(--canvas-border);
+            box-shadow: 0 0 24px var(--canvas-glow);
             border-radius: 4px;
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
 
         /* ── Overlay ── */
         #overlay {
             position: absolute;
             inset: 0;
-            background: rgba(0, 0, 0, 0.88);
+            background: var(--overlay-bg);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             border-radius: 4px;
             gap: 6px;
+            transition: background 0.3s;
         }
 
         #overlay h2 {
             font-size: 2rem;
-            color: #00cc44;
+            color: var(--overlay-h);
             text-shadow: 0 0 12px #00cc4466;
         }
 
-        #overlay-subtitle { color: #777; font-size: 0.88rem; }
+        #overlay-subtitle { color: var(--overlay-sub); font-size: 0.88rem; }
 
         #overlay-score {
             font-size: 1.3rem;
-            color: #fff;
+            color: var(--page-text);
             margin: 6px 0 4px;
         }
 
         #start-btn {
-            background: #00cc44;
-            color: #000;
+            background: var(--hud-val);
+            color: #fff;
             border: none;
             padding: 10px 32px;
             border-radius: 7px;
             font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
-            transition: background 0.15s, transform 0.1s;
+            transition: opacity 0.15s, transform 0.1s;
             margin-top: 4px;
         }
 
-        #start-btn:hover { background: #00ee55; transform: scale(1.03); }
+        #start-btn:hover { opacity: 0.85; transform: scale(1.03); }
 
         #leaderboard {
             margin-top: 10px;
@@ -107,7 +163,7 @@
         }
 
         #leaderboard h3 {
-            color: #00cc44;
+            color: var(--lb-h);
             font-size: 0.88rem;
             margin-bottom: 6px;
             letter-spacing: 1px;
@@ -115,13 +171,13 @@
 
         #leaderboard ol {
             padding-left: 20px;
-            color: #999;
+            color: var(--lb-text);
             font-size: 0.82rem;
             text-align: left;
         }
 
         #leaderboard li { padding: 2px 0; }
-        #leaderboard li.hi { color: #00cc44; font-weight: bold; }
+        #leaderboard li.hi { color: var(--lb-hi); font-weight: bold; }
 
         /* ── Powerup toast ── */
         #pu-toast {
@@ -148,14 +204,14 @@
             gap: 10px 18px;
             margin-top: 10px;
             font-size: 0.76rem;
-            color: #666;
-            max-width: 620px;
+            color: var(--legend-text);
+            max-width: 640px;
         }
 
         .leg { display: flex; align-items: center; gap: 5px; }
         .dot { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
 
-        #hint { margin-top: 6px; color: #444; font-size: 0.74rem; }
+        #hint { margin-top: 6px; color: var(--hint-text); font-size: 0.74rem; }
     </style>
 </head>
 <body>
@@ -167,6 +223,7 @@
     <div class="hud-item">Best&nbsp; <span id="hud-best">0</span></div>
     <div class="hud-item">Speed <span id="hud-speed">1</span></div>
     <div class="hud-item">Mult&nbsp; <span id="hud-mult">×1</span></div>
+    <button id="theme-toggle">☀️ Light</button>
 </div>
 
 <div id="canvas-wrapper">
@@ -214,6 +271,52 @@ const TELE_MID  = Math.floor(COLS / 2);       // 15
 const TELE_RANGE = [TELE_MID - 1, TELE_MID, TELE_MID + 1]; // [14, 15, 16]
 
 // ─────────────────────────────────────────────
+//  Themes
+// ─────────────────────────────────────────────
+const THEMES = {
+    dark: {
+        bg:             '#0d0d0d',
+        grid:           '#181818',
+        obstacleBody:   '#2a3a2a',
+        obstacleInner:  '#1e2e1e',
+        snakeHead:      '#00ff55',
+        snakeBody:      '#00cc44',
+        snakeGlow:      '#00ff55',
+        food:           '#ff3333',
+        teleporter:     '#4488ff',
+        teleporterText: '#cce4ff',
+        babyHead:       '#ffcc44',
+        babyBody:       '#ff9900',
+        babyGlow:       '#ffcc44',
+        multBadge:      '#cc44ff',
+        pauseOverlay:   'rgba(0,0,0,0.6)',
+        pauseText:      '#00cc44',
+        pauseSub:       '#666',
+        timerBg:        '#333',
+    },
+    light: {
+        bg:             '#f2f7f2',
+        grid:           '#ddeedd',
+        obstacleBody:   '#8faa8f',
+        obstacleInner:  '#7a957a',
+        snakeHead:      '#00aa33',
+        snakeBody:      '#009928',
+        snakeGlow:      '#00aa33',
+        food:           '#ee2222',
+        teleporter:     '#2266dd',
+        teleporterText: '#001a99',
+        babyHead:       '#dd9900',
+        babyBody:       '#cc7700',
+        babyGlow:       '#dd9900',
+        multBadge:      '#9922cc',
+        pauseOverlay:   'rgba(220,240,220,0.75)',
+        pauseText:      '#007722',
+        pauseSub:       '#448844',
+        timerBg:        '#ccc',
+    },
+};
+
+// ─────────────────────────────────────────────
 //  DOM
 // ─────────────────────────────────────────────
 const canvas   = document.getElementById('canvas');
@@ -233,6 +336,7 @@ let food, obstacles, powerups;
 let score, multiplier, multTimer, boostTimer;
 let speedLevel, gameLoop;
 let babySnake = null; // { segs: [{x,y}], dir: {x,y}, startTime: ms }
+let darkMode = true;
 let state = 'idle'; // idle | running | paused | over
 
 // ─────────────────────────────────────────────
@@ -515,12 +619,14 @@ function updateHUD() {
 //  Drawing
 // ─────────────────────────────────────────────
 function draw() {
+    const T = THEMES[darkMode ? 'dark' : 'light'];
+
     // Background
-    ctx.fillStyle = '#0d0d0d';
+    ctx.fillStyle = T.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Grid
-    ctx.strokeStyle = '#181818';
+    ctx.strokeStyle = T.grid;
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= COLS; x++) {
         ctx.beginPath(); ctx.moveTo(x*CELL, 0); ctx.lineTo(x*CELL, canvas.height); ctx.stroke();
@@ -531,10 +637,10 @@ function draw() {
 
     // Obstacles
     obstacles.forEach(o => {
-        ctx.fillStyle = '#2a3a2a';
+        ctx.fillStyle = T.obstacleBody;
         rr(o.x*CELL+1, o.y*CELL+1, CELL-2, CELL-2, 3);
         ctx.fill();
-        ctx.strokeStyle = '#1e2e1e';
+        ctx.strokeStyle = T.obstacleInner;
         ctx.lineWidth = 1;
         rr(o.x*CELL+3, o.y*CELL+3, CELL-6, CELL-6, 2);
         ctx.stroke();
@@ -549,27 +655,26 @@ function draw() {
     ];
     const teleT = Date.now() / 1000;
     teleporterCells.forEach(t => {
-        // Animated alpha pulse
         const pulse = 0.55 + 0.35 * Math.sin(teleT * 3 + t.x + t.y);
         ctx.globalAlpha = pulse;
-        ctx.fillStyle = '#4488ff';
-        ctx.shadowColor = '#4488ff';
+        ctx.fillStyle = T.teleporter;
+        ctx.shadowColor = T.teleporter;
         ctx.shadowBlur = 14;
         rr(t.x*CELL+1, t.y*CELL+1, CELL-2, CELL-2, 4);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
 
-        ctx.fillStyle = '#cce4ff';
+        ctx.fillStyle = T.teleporterText;
         ctx.font = `bold ${CELL - 7}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(t.arrow, t.x*CELL + CELL/2, t.y*CELL + CELL/2 + 1);
     });
 
-    // Food (pulsing glow)
-    ctx.fillStyle = '#ff3333';
-    ctx.shadowColor = '#ff3333';
+    // Food
+    ctx.fillStyle = T.food;
+    ctx.shadowColor = T.food;
     ctx.shadowBlur = 10;
     rr(food.x*CELL+4, food.y*CELL+4, CELL-8, CELL-8, 4);
     ctx.fill();
@@ -593,7 +698,7 @@ function draw() {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = darkMode ? '#000' : '#fff';
         ctx.font = `${CELL - 7}px serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -606,10 +711,10 @@ function draw() {
     snake.forEach((seg, i) => {
         const isHead = i === 0;
         ctx.globalAlpha = isHead ? 1 : Math.max(0.35, 1 - i * 0.018);
-        ctx.fillStyle   = isHead ? '#00ff55' : '#00cc44';
+        ctx.fillStyle   = isHead ? T.snakeHead : T.snakeBody;
 
         if (isHead) {
-            ctx.shadowColor = '#00ff55';
+            ctx.shadowColor = T.snakeGlow;
             ctx.shadowBlur  = 14;
         }
 
@@ -621,17 +726,16 @@ function draw() {
 
     // Baby snake
     if (babySnake) {
-        const elapsed  = Date.now() - babySnake.startTime;
+        const elapsed   = Date.now() - babySnake.startTime;
         const remaining = 1 - elapsed / 10000;
-        // Flash in last 2 seconds
         const flash = elapsed > 8000 ? (Math.floor(elapsed / 200) % 2 === 0) : true;
 
         if (flash) {
             babySnake.segs.forEach((seg, i) => {
                 const isHead = i === 0;
                 ctx.globalAlpha = isHead ? Math.max(0.5, remaining) : Math.max(0.25, remaining * 0.65);
-                ctx.fillStyle   = isHead ? '#ffcc44' : '#ff9900';
-                if (isHead) { ctx.shadowColor = '#ffcc44'; ctx.shadowBlur = 12; }
+                ctx.fillStyle   = isHead ? T.babyHead : T.babyBody;
+                if (isHead) { ctx.shadowColor = T.babyGlow; ctx.shadowBlur = 12; }
                 rr(seg.x*CELL+2, seg.y*CELL+2, CELL-4, CELL-4, isHead ? 5 : 3);
                 ctx.fill();
                 ctx.shadowBlur = 0;
@@ -642,15 +746,15 @@ function draw() {
         // Timer bar above baby head
         const headSeg = babySnake.segs[0];
         const barW = CELL - 4;
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = T.timerBg;
         ctx.fillRect(headSeg.x*CELL + 2, headSeg.y*CELL - 5, barW, 3);
-        ctx.fillStyle = remaining > 0.3 ? '#ff9900' : '#ff3333';
+        ctx.fillStyle = remaining > 0.3 ? T.babyBody : T.food;
         ctx.fillRect(headSeg.x*CELL + 2, headSeg.y*CELL - 5, barW * remaining, 3);
     }
 
     // Multiplier badge
     if (multiplier > 1) {
-        ctx.fillStyle = '#cc44ff';
+        ctx.fillStyle = T.multBadge;
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
@@ -744,15 +848,15 @@ document.addEventListener('keydown', e => {
         if (state === 'running') {
             clearInterval(gameLoop);
             state = 'paused';
-            // Dimmed pause screen
-            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            const T = THEMES[darkMode ? 'dark' : 'light'];
+            ctx.fillStyle = T.pauseOverlay;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#00cc44';
+            ctx.fillStyle = T.pauseText;
             ctx.font = 'bold 2.2rem sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('⏸ PAUSED', canvas.width/2, canvas.height/2);
-            ctx.fillStyle = '#666';
+            ctx.fillStyle = T.pauseSub;
             ctx.font = '0.9rem sans-serif';
             ctx.fillText('Press P to resume', canvas.width/2, canvas.height/2 + 38);
         } else if (state === 'paused') {
@@ -778,9 +882,31 @@ document.addEventListener('keydown', e => {
 startBtn.addEventListener('click', startGame);
 
 // ─────────────────────────────────────────────
+//  Theme toggle
+// ─────────────────────────────────────────────
+function applyTheme() {
+    document.body.classList.toggle('light', !darkMode);
+    document.getElementById('theme-toggle').textContent = darkMode ? '☀️ Light' : '🌙 Dark';
+    localStorage.setItem('snakeTheme', darkMode ? 'dark' : 'light');
+    // Redraw canvas immediately if not mid-game
+    if (state === 'idle' || state === 'paused') {
+        const T = THEMES[darkMode ? 'dark' : 'light'];
+        ctx.fillStyle = T.bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+}
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+    darkMode = !darkMode;
+    applyTheme();
+});
+
+// ─────────────────────────────────────────────
 //  Boot
 // ─────────────────────────────────────────────
-ctx.fillStyle = '#0d0d0d';
+darkMode = localStorage.getItem('snakeTheme') !== 'light';
+applyTheme();
+ctx.fillStyle = THEMES[darkMode ? 'dark' : 'light'].bg;
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 renderLeaderboard(-1);
 document.getElementById('hud-best').textContent = bestScore();
