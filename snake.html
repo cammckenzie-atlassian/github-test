@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐍 Snake</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0d0d0d;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            color: #00cc44;
+            margin-bottom: 12px;
+            text-shadow: 0 0 14px #00cc4466;
+            letter-spacing: 2px;
+        }
+
+        #hud {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .hud-item {
+            background: #161616;
+            padding: 6px 18px;
+            border-radius: 8px;
+            border: 1px solid #2a2a2a;
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .hud-item span {
+            color: #00cc44;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        #canvas-wrapper {
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            border: 2px solid #00cc44;
+            box-shadow: 0 0 24px #00cc4433;
+            border-radius: 4px;
+        }
+
+        /* ── Overlay ── */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            gap: 6px;
+        }
+
+        #overlay h2 {
+            font-size: 2rem;
+            color: #00cc44;
+            text-shadow: 0 0 12px #00cc4466;
+        }
+
+        #overlay-subtitle { color: #777; font-size: 0.88rem; }
+
+        #overlay-score {
+            font-size: 1.3rem;
+            color: #fff;
+            margin: 6px 0 4px;
+        }
+
+        #start-btn {
+            background: #00cc44;
+            color: #000;
+            border: none;
+            padding: 10px 32px;
+            border-radius: 7px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+            margin-top: 4px;
+        }
+
+        #start-btn:hover { background: #00ee55; transform: scale(1.03); }
+
+        #leaderboard {
+            margin-top: 10px;
+            width: 220px;
+            text-align: center;
+        }
+
+        #leaderboard h3 {
+            color: #00cc44;
+            font-size: 0.88rem;
+            margin-bottom: 6px;
+            letter-spacing: 1px;
+        }
+
+        #leaderboard ol {
+            padding-left: 20px;
+            color: #999;
+            font-size: 0.82rem;
+            text-align: left;
+        }
+
+        #leaderboard li { padding: 2px 0; }
+        #leaderboard li.hi { color: #00cc44; font-weight: bold; }
+
+        /* ── Powerup toast ── */
+        #pu-toast {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.35s;
+            white-space: nowrap;
+        }
+
+        /* ── Legend ── */
+        #legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px 18px;
+            margin-top: 10px;
+            font-size: 0.76rem;
+            color: #666;
+            max-width: 620px;
+        }
+
+        .leg { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+
+        #hint { margin-top: 6px; color: #444; font-size: 0.74rem; }
+    </style>
+</head>
+<body>
+
+<h1>🐍 SNAKE</h1>
+
+<div id="hud">
+    <div class="hud-item">Score <span id="hud-score">0</span></div>
+    <div class="hud-item">Best&nbsp; <span id="hud-best">0</span></div>
+    <div class="hud-item">Speed <span id="hud-speed">1</span></div>
+    <div class="hud-item">Mult&nbsp; <span id="hud-mult">×1</span></div>
+</div>
+
+<div id="canvas-wrapper">
+    <canvas id="canvas" width="600" height="600"></canvas>
+
+    <div id="overlay">
+        <h2 id="ov-title">🐍 Snake</h2>
+        <p id="ov-sub">Arrow keys or WASD to move · P to pause</p>
+        <div id="ov-score"></div>
+        <button id="start-btn">▶ Start Game</button>
+        <div id="leaderboard"></div>
+    </div>
+
+    <div id="pu-toast"></div>
+</div>
+
+<div id="legend">
+    <div class="leg"><div class="dot" style="background:#00cc44"></div>Snake</div>
+    <div class="leg"><div class="dot" style="background:#ff3333"></div>Food</div>
+    <div class="leg"><div class="dot" style="background:#ffcc00"></div>⚡ Speed Boost</div>
+    <div class="leg"><div class="dot" style="background:#cc44ff"></div>✦ Score ×2</div>
+    <div class="leg"><div class="dot" style="background:#00ccff"></div>✂ Shrink</div>
+    <div class="leg"><div class="dot" style="background:#4a5a4a"></div>Obstacle</div>
+</div>
+
+<div id="hint">Arrow keys / WASD to steer &nbsp;·&nbsp; P to pause</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  Constants
+// ─────────────────────────────────────────────
+const COLS = 30, ROWS = 30, CELL = 20;
+const OBSTACLE_COUNT = 18;
+const BASE_MS = 175;          // tick interval at speed level 0
+const SPEED_STEP_MS = 10;     // reduction per speed level
+const MIN_MS = 55;
+const POINTS_PER_LEVEL = 5;
+const PU_SPAWN_CHANCE = 0.07; // per tick, only when <2 powerups exist
+const PU_TTL = 180;           // ticks before powerup disappears
+
+// ─────────────────────────────────────────────
+//  DOM
+// ─────────────────────────────────────────────
+const canvas   = document.getElementById('canvas');
+const ctx      = canvas.getContext('2d');
+const overlay  = document.getElementById('overlay');
+const ovTitle  = document.getElementById('ov-title');
+const ovSub    = document.getElementById('ov-sub');
+const ovScore  = document.getElementById('ov-score');
+const startBtn = document.getElementById('start-btn');
+const puToast  = document.getElementById('pu-toast');
+
+// ─────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────
+let snake, dir, nextDir;
+let food, obstacles, powerups;
+let score, multiplier, multTimer, boostTimer;
+let speedLevel, gameLoop;
+let state = 'idle'; // idle | running | paused | over
+
+// ─────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────
+function currentInterval() {
+    const boost = boostTimer > 0 ? 45 : 0;
+    return Math.max(MIN_MS, BASE_MS - speedLevel * SPEED_STEP_MS - boost);
+}
+
+function key(x, y) { return `${x},${y}`; }
+
+function buildOccupiedSet(includeFood = true) {
+    const s = new Set(snake.map(p => key(p.x, p.y)));
+    obstacles.forEach(o => s.add(key(o.x, o.y)));
+    powerups.forEach(p => s.add(key(p.x, p.y)));
+    if (includeFood && food) s.add(key(food.x, food.y));
+    return s;
+}
+
+function randomFreeCell(occupied) {
+    let x, y;
+    do {
+        x = Math.floor(Math.random() * COLS);
+        y = Math.floor(Math.random() * ROWS);
+    } while (occupied.has(key(x, y)));
+    return { x, y };
+}
+
+function safeZone(x, y) {
+    return x >= 10 && x <= 20 && y >= 10 && y <= 20;
+}
+
+// ─────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────
+function initGame() {
+    snake    = [{ x:15,y:15 },{ x:14,y:15 },{ x:13,y:15 }];
+    dir      = { x:1, y:0 };
+    nextDir  = { x:1, y:0 };
+    score    = 0;
+    multiplier = 1;
+    multTimer  = 0;
+    boostTimer = 0;
+    speedLevel = 0;
+    powerups   = [];
+    obstacles  = spawnObstacles();
+    food       = spawnFood();
+    updateHUD();
+}
+
+function spawnObstacles() {
+    const obs = [];
+    const used = new Set();
+    while (obs.length < OBSTACLE_COUNT) {
+        const x = Math.floor(Math.random() * COLS);
+        const y = Math.floor(Math.random() * ROWS);
+        if (!safeZone(x, y) && !used.has(key(x,y))) {
+            obs.push({ x, y });
+            used.add(key(x,y));
+        }
+    }
+    return obs;
+}
+
+function spawnFood() {
+    return randomFreeCell(buildOccupiedSet(false));
+}
+
+function trySpawnPowerup() {
+    if (powerups.length >= 2) return;
+    if (Math.random() > PU_SPAWN_CHANCE) return;
+    const types = ['speed', 'multi', 'shrink'];
+    const type  = types[Math.floor(Math.random() * types.length)];
+    const cell  = randomFreeCell(buildOccupiedSet());
+    powerups.push({ ...cell, type, ttl: PU_TTL });
+}
+
+// ─────────────────────────────────────────────
+//  Game Loop
+// ─────────────────────────────────────────────
+function tick() {
+    // Timers
+    if (multTimer  > 0) { multTimer--;  if (multTimer  === 0) multiplier = 1; }
+    if (boostTimer > 0)   boostTimer--;
+
+    // Age powerups
+    powerups = powerups.filter(p => --p.ttl > 0);
+
+    // Maybe spawn
+    trySpawnPowerup();
+
+    // Move
+    dir = nextDir;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+    // Collisions
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) { endGame(); return; }
+    if (snake.some(s => s.x === head.x && s.y === head.y))             { endGame(); return; }
+    if (obstacles.some(o => o.x === head.x && o.y === head.y))         { endGame(); return; }
+
+    snake.unshift(head);
+
+    // Eat food?
+    if (head.x === food.x && head.y === food.y) {
+        score += 1 * multiplier;
+        food = spawnFood();
+        const newLevel = Math.floor(score / POINTS_PER_LEVEL);
+        if (newLevel > speedLevel) {
+            speedLevel = newLevel;
+            restartLoop();
+        }
+    } else {
+        snake.pop();
+    }
+
+    // Eat powerup?
+    const puIdx = powerups.findIndex(p => p.x === head.x && p.y === head.y);
+    if (puIdx !== -1) {
+        const pu = powerups.splice(puIdx, 1)[0];
+        activatePowerup(pu.type);
+    }
+
+    updateHUD();
+    draw();
+}
+
+function activatePowerup(type) {
+    if (type === 'speed') {
+        boostTimer = 70;
+        restartLoop();
+        toast('⚡ Speed Boost!', '#ffcc00');
+    } else if (type === 'multi') {
+        multiplier = 2;
+        multTimer  = 100;
+        toast('✦ Score ×2 active!', '#cc44ff');
+    } else {
+        const cut = Math.max(1, Math.floor(snake.length / 3));
+        snake.splice(snake.length - cut);
+        toast('✂ Snake shrunk!', '#00ccff');
+    }
+}
+
+let toastTimeout;
+function toast(msg, color) {
+    puToast.textContent = msg;
+    puToast.style.borderColor = color;
+    puToast.style.color = color;
+    puToast.style.opacity = '1';
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => { puToast.style.opacity = '0'; }, 2200);
+}
+
+function restartLoop() {
+    clearInterval(gameLoop);
+    gameLoop = setInterval(tick, currentInterval());
+}
+
+function updateHUD() {
+    document.getElementById('hud-score').textContent = score;
+    document.getElementById('hud-best').textContent  = bestScore();
+    document.getElementById('hud-speed').textContent = speedLevel + 1;
+    document.getElementById('hud-mult').textContent  = `×${multiplier}`;
+}
+
+// ─────────────────────────────────────────────
+//  Drawing
+// ─────────────────────────────────────────────
+function draw() {
+    // Background
+    ctx.fillStyle = '#0d0d0d';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid
+    ctx.strokeStyle = '#181818';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x <= COLS; x++) {
+        ctx.beginPath(); ctx.moveTo(x*CELL, 0); ctx.lineTo(x*CELL, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y <= ROWS; y++) {
+        ctx.beginPath(); ctx.moveTo(0, y*CELL); ctx.lineTo(canvas.width, y*CELL); ctx.stroke();
+    }
+
+    // Obstacles
+    obstacles.forEach(o => {
+        ctx.fillStyle = '#2a3a2a';
+        rr(o.x*CELL+1, o.y*CELL+1, CELL-2, CELL-2, 3);
+        ctx.fill();
+        ctx.strokeStyle = '#1e2e1e';
+        ctx.lineWidth = 1;
+        rr(o.x*CELL+3, o.y*CELL+3, CELL-6, CELL-6, 2);
+        ctx.stroke();
+    });
+
+    // Food (pulsing glow)
+    ctx.fillStyle = '#ff3333';
+    ctx.shadowColor = '#ff3333';
+    ctx.shadowBlur = 10;
+    rr(food.x*CELL+4, food.y*CELL+4, CELL-8, CELL-8, 4);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Powerups
+    powerups.forEach(p => {
+        const fade = p.ttl < 40 ? p.ttl / 40 : 1;
+        ctx.globalAlpha = fade;
+
+        let bg, emoji;
+        if (p.type === 'speed') { bg = '#ffcc00'; emoji = '⚡'; }
+        else if (p.type === 'multi') { bg = '#cc44ff'; emoji = '✦'; }
+        else { bg = '#00ccff'; emoji = '✂'; }
+
+        ctx.fillStyle = bg;
+        ctx.shadowColor = bg;
+        ctx.shadowBlur = 8;
+        rr(p.x*CELL+2, p.y*CELL+2, CELL-4, CELL-4, 5);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#000';
+        ctx.font = `${CELL - 7}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, p.x*CELL + CELL/2, p.y*CELL + CELL/2 + 1);
+
+        ctx.globalAlpha = 1;
+    });
+
+    // Snake
+    snake.forEach((seg, i) => {
+        const isHead = i === 0;
+        ctx.globalAlpha = isHead ? 1 : Math.max(0.35, 1 - i * 0.018);
+        ctx.fillStyle   = isHead ? '#00ff55' : '#00cc44';
+
+        if (isHead) {
+            ctx.shadowColor = '#00ff55';
+            ctx.shadowBlur  = 14;
+        }
+
+        rr(seg.x*CELL+1, seg.y*CELL+1, CELL-2, CELL-2, isHead ? 6 : 3);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+    });
+
+    // Multiplier badge
+    if (multiplier > 1) {
+        ctx.fillStyle = '#cc44ff';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`×${multiplier}`, canvas.width - 5, 4);
+    }
+}
+
+// Rounded rect path helper
+function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.lineTo(x+w-r, y);
+    ctx.arcTo(x+w, y,     x+w, y+r,   r);
+    ctx.lineTo(x+w, y+h-r);
+    ctx.arcTo(x+w, y+h,   x+w-r, y+h, r);
+    ctx.lineTo(x+r, y+h);
+    ctx.arcTo(x,   y+h,   x, y+h-r,   r);
+    ctx.lineTo(x,  y+r);
+    ctx.arcTo(x,   y,     x+r, y,      r);
+    ctx.closePath();
+}
+
+// ─────────────────────────────────────────────
+//  Start / End
+// ─────────────────────────────────────────────
+function startGame() {
+    overlay.style.display = 'none';
+    initGame();
+    state = 'running';
+    draw();
+    gameLoop = setInterval(tick, currentInterval());
+}
+
+function endGame() {
+    clearInterval(gameLoop);
+    state = 'over';
+
+    const pos = recordScore(score);
+    updateHUD();
+
+    ovTitle.textContent = '💀 Game Over';
+    ovSub.textContent   = pos === 0 ? '🏆 New High Score!' : 'Nice try — play again?';
+    ovScore.textContent = `Score: ${score}`;
+    startBtn.textContent = '▶ Play Again';
+    renderLeaderboard(pos);
+    overlay.style.display = 'flex';
+}
+
+// ─────────────────────────────────────────────
+//  Leaderboard (localStorage)
+// ─────────────────────────────────────────────
+function loadBoard() {
+    try { return JSON.parse(localStorage.getItem('snakeBoard') || '[]'); }
+    catch { return []; }
+}
+
+function bestScore() {
+    const b = loadBoard();
+    return b.length ? b[0] : 0;
+}
+
+function recordScore(s) {
+    const b = loadBoard();
+    b.push(s);
+    b.sort((a, z) => z - a);
+    const top = b.slice(0, 10);
+    localStorage.setItem('snakeBoard', JSON.stringify(top));
+    return top.indexOf(s);
+}
+
+function renderLeaderboard(highlight) {
+    const b = loadBoard();
+    const el = document.getElementById('leaderboard');
+    if (!b.length) { el.innerHTML = ''; return; }
+    let html = '<h3>🏆 Leaderboard</h3><ol>';
+    b.forEach((s, i) => {
+        const cls = i === highlight ? ' class="hi"' : '';
+        html += `<li${cls}>${s} pts${i === highlight ? ' ◀' : ''}</li>`;
+    });
+    html += '</ol>';
+    el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+//  Input
+// ─────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+    if (state === 'idle' || state === 'over') return;
+
+    if (e.key === 'p' || e.key === 'P') {
+        if (state === 'running') {
+            clearInterval(gameLoop);
+            state = 'paused';
+            // Dimmed pause screen
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#00cc44';
+            ctx.font = 'bold 2.2rem sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⏸ PAUSED', canvas.width/2, canvas.height/2);
+            ctx.fillStyle = '#666';
+            ctx.font = '0.9rem sans-serif';
+            ctx.fillText('Press P to resume', canvas.width/2, canvas.height/2 + 38);
+        } else if (state === 'paused') {
+            state = 'running';
+            restartLoop();
+        }
+        return;
+    }
+
+    const map = {
+        ArrowUp:    { x: 0, y:-1 }, w: { x: 0, y:-1 }, W: { x: 0, y:-1 },
+        ArrowDown:  { x: 0, y: 1 }, s: { x: 0, y: 1 }, S: { x: 0, y: 1 },
+        ArrowLeft:  { x:-1, y: 0 }, a: { x:-1, y: 0 }, A: { x:-1, y: 0 },
+        ArrowRight: { x: 1, y: 0 }, d: { x: 1, y: 0 }, D: { x: 1, y: 0 },
+    };
+    const nd = map[e.key];
+    if (nd) {
+        if (nd.x !== -dir.x || nd.y !== -dir.y) nextDir = nd;
+        e.preventDefault();
+    }
+});
+
+startBtn.addEventListener('click', startGame);
+
+// ─────────────────────────────────────────────
+//  Boot
+// ─────────────────────────────────────────────
+ctx.fillStyle = '#0d0d0d';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+renderLeaderboard(-1);
+document.getElementById('hud-best').textContent = bestScore();
+</script>
+</body>
+</html>
