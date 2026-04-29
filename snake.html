@@ -190,6 +190,7 @@
     <div class="leg"><div class="dot" style="background:#cc44ff"></div>✦ Score ×2</div>
     <div class="leg"><div class="dot" style="background:#00ccff"></div>✂ Shrink</div>
     <div class="leg"><div class="dot" style="background:#ff9900"></div>🍼 Baby Snake</div>
+    <div class="leg"><div class="dot" style="background:#4488ff"></div>🌀 Teleporter</div>
     <div class="leg"><div class="dot" style="background:#4a5a4a"></div>Obstacle</div>
 </div>
 
@@ -207,6 +208,10 @@ const MIN_MS = 55;
 const POINTS_PER_LEVEL = 5;
 const PU_SPAWN_CHANCE = 0.07; // per tick, only when <2 powerups exist
 const PU_TTL = 180;           // ticks before powerup disappears
+
+// Teleporters: 3 cells wide, centred on each side
+const TELE_MID  = Math.floor(COLS / 2);       // 15
+const TELE_RANGE = [TELE_MID - 1, TELE_MID, TELE_MID + 1]; // [14, 15, 16]
 
 // ─────────────────────────────────────────────
 //  DOM
@@ -262,6 +267,20 @@ function safeZone(x, y) {
     return x >= 10 && x <= 20 && y >= 10 && y <= 20;
 }
 
+function isTeleporterEdge(x, y) {
+    return (TELE_RANGE.includes(x) && (y === 0 || y === ROWS - 1)) ||
+           (TELE_RANGE.includes(y) && (x === 0 || x === COLS - 1));
+}
+
+// Returns destination cell if (x,y) is an out-of-bounds teleporter exit, else null
+function getTeleportDest(x, y) {
+    if (y < 0     && TELE_RANGE.includes(x)) return { x, y: ROWS - 1 };
+    if (y >= ROWS  && TELE_RANGE.includes(x)) return { x, y: 0 };
+    if (x < 0     && TELE_RANGE.includes(y)) return { x: COLS - 1, y };
+    if (x >= COLS  && TELE_RANGE.includes(y)) return { x: 0, y };
+    return null;
+}
+
 // ─────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────
@@ -287,7 +306,7 @@ function spawnObstacles() {
     while (obs.length < OBSTACLE_COUNT) {
         const x = Math.floor(Math.random() * COLS);
         const y = Math.floor(Math.random() * ROWS);
-        if (!safeZone(x, y) && !used.has(key(x,y))) {
+        if (!safeZone(x, y) && !isTeleporterEdge(x, y) && !used.has(key(x,y))) {
             obs.push({ x, y });
             used.add(key(x,y));
         }
@@ -326,10 +345,19 @@ function tick() {
     dir = nextDir;
     const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
 
-    // Collisions
-    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) { endGame(); return; }
-    if (snake.some(s => s.x === head.x && s.y === head.y))             { endGame(); return; }
-    if (obstacles.some(o => o.x === head.x && o.y === head.y))         { endGame(); return; }
+    // Collisions / teleport
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+        const dest = getTeleportDest(head.x, head.y);
+        if (dest) {
+            head.x = dest.x;
+            head.y = dest.y;
+            toast('🌀 Teleported!', '#4488ff');
+        } else {
+            endGame(); return;
+        }
+    }
+    if (snake.some(s => s.x === head.x && s.y === head.y))     { endGame(); return; }
+    if (obstacles.some(o => o.x === head.x && o.y === head.y)) { endGame(); return; }
 
     snake.unshift(head);
 
@@ -408,7 +436,13 @@ function tickBabySnake() {
     if (!nd) { babySnake = null; return; }
 
     babySnake.dir = nd;
-    const newHead = { x: babySnake.segs[0].x + nd.x, y: babySnake.segs[0].y + nd.y };
+    let newHead = { x: babySnake.segs[0].x + nd.x, y: babySnake.segs[0].y + nd.y };
+    // Baby snake uses teleporters too
+    if (newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS) {
+        const dest = getTeleportDest(newHead.x, newHead.y);
+        if (dest) { newHead = dest; }
+        else { babySnake = null; return; }
+    }
     babySnake.segs.unshift(newHead);
 
     if (newHead.x === food.x && newHead.y === food.y) {
@@ -428,8 +462,13 @@ function babyNextDir() {
     const allDirs = [{ x:0,y:-1 },{ x:0,y:1 },{ x:-1,y:0 },{ x:1,y:0 }];
 
     const valid = allDirs.filter(d => {
-        const nx = head.x + d.x, ny = head.y + d.y;
-        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return false;
+        let nx = head.x + d.x, ny = head.y + d.y;
+        // Resolve teleporter exits
+        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
+            const dest = getTeleportDest(nx, ny);
+            if (!dest) return false;
+            nx = dest.x; ny = dest.y;
+        }
         if (obstacles.some(o => o.x === nx && o.y === ny)) return false;
         // Avoid own body (all but tail, which will vacate)
         if (babySnake.segs.slice(0, -1).some(s => s.x === nx && s.y === ny)) return false;
@@ -499,6 +538,33 @@ function draw() {
         ctx.lineWidth = 1;
         rr(o.x*CELL+3, o.y*CELL+3, CELL-6, CELL-6, 2);
         ctx.stroke();
+    });
+
+    // Teleporters
+    const teleporterCells = [
+        ...TELE_RANGE.map(x => ({ x, y: 0,        arrow: '▲' })),
+        ...TELE_RANGE.map(x => ({ x, y: ROWS - 1,  arrow: '▼' })),
+        ...TELE_RANGE.map(y => ({ x: 0,        y,  arrow: '◀' })),
+        ...TELE_RANGE.map(y => ({ x: COLS - 1,  y,  arrow: '▶' })),
+    ];
+    const teleT = Date.now() / 1000;
+    teleporterCells.forEach(t => {
+        // Animated alpha pulse
+        const pulse = 0.55 + 0.35 * Math.sin(teleT * 3 + t.x + t.y);
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = '#4488ff';
+        ctx.shadowColor = '#4488ff';
+        ctx.shadowBlur = 14;
+        rr(t.x*CELL+1, t.y*CELL+1, CELL-2, CELL-2, 4);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = '#cce4ff';
+        ctx.font = `bold ${CELL - 7}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(t.arrow, t.x*CELL + CELL/2, t.y*CELL + CELL/2 + 1);
     });
 
     // Food (pulsing glow)
