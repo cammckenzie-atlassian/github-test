@@ -333,7 +333,7 @@ const ITEM_TYPES = [
 ];
 
 function maybeSpawnItem() {
-  if (items.length < 2 && Math.random() < 0.18) {
+  if (items.length < 3 && Math.random() < 0.45) {
     const t = ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)];
     items.push({...t, ...randomCell([food, ...items]), spawnScore: score});
   }
