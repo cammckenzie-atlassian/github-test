@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OUROBOROS — Snake × Pac-Man</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #04040f;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+    user-select: none;
+  }
+  h1 {
+    font-size: 2rem;
+    letter-spacing: 0.35em;
+    color: #ffcc00;
+    text-shadow: 0 0 24px #ffcc0066, 0 0 48px #ffcc0033;
+    margin-bottom: 6px;
+  }
+  .tagline {
+    color: #555588;
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  canvas {
+    display: block;
+    border: 2px solid #2222cc;
+    box-shadow: 0 0 40px #2222cc44, 0 0 80px #2222cc22;
+  }
+  .legend {
+    display: flex;
+    gap: 22px;
+    margin-top: 12px;
+    font-size: 0.72rem;
+    color: #555588;
+    letter-spacing: 0.05em;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<h1>🐍 OUROBOROS 👻</h1>
+<p class="tagline">You are the maze · Trap Pac-Man 5× to win</p>
+<canvas id="game"></canvas>
+<div class="legend">
+  <div class="legend-item"><div class="dot" style="background:#ff3333;box-shadow:0 0 6px #ff3333"></div> Freeze Pac-Man</div>
+  <div class="legend-item"><div class="dot" style="background:#ffee00;box-shadow:0 0 6px #ffee00"></div> Ghost Mode (phase through walls)</div>
+  <div class="legend-item"><div class="dot" style="background:#33ff77;box-shadow:0 0 6px #33ff77"></div> Eraser (remove 8 old walls)</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  OUROBOROS  —  Snake × Pac-Man Hybrid
+//  Core Loop : The Trap   |  AI: Pathfinder  |  Controls: Smooth
+// ═══════════════════════════════════════════════════════════════
+
+const COLS   = 29;
+const ROWS   = 27;
+const CELL   = 22;
+const HUD_H  = 64;
+const CW     = COLS * CELL;
+const CH     = ROWS * CELL + HUD_H;
+
+// Cell type constants
+const EMPTY     = 0;
+const WALL      = 1;
+const PU_FREEZE = 2;
+const PU_GHOST  = 3;
+const PU_ERASER = 4;
+
+// Direction helpers
+const DIR = {
+  UP:    { dx:  0, dy: -1 },
+  DOWN:  { dx:  0, dy:  1 },
+  LEFT:  { dx: -1, dy:  0 },
+  RIGHT: { dx:  1, dy:  0 }
+};
+
+// Canvas setup
+const canvas = document.getElementById('game');
+canvas.width  = CW;
+canvas.height = CH;
+const ctx = canvas.getContext('2d');
+
+// ── State ────────────────────────────────────────────────────
+let grid, wallHistory, powerups;
+let snake, pacman;
+let score, lives, trapCount;
+let ghostMode, ghostTicks, freezeMode, freezeTicks;
+let gameState;   // 'start' | 'playing' | 'paused' | 'dead' | 'win' | 'gameover'
+let deadTimer;
+let scorePopups; // [{text, x, y, life}]
+
+// Interval config (ms for snake/pac, ticks for effects)
+const SNAKE_MS    = 140;
+const PAC_MS      = 215;
+const PU_SPAWN_MS = 3800;
+const PU_LIFE_MS  = 9000;
+let lastSnakeMs = 0, lastPacMs = 0, lastPuSpawnMs = 0;
+
+// ── Init ─────────────────────────────────────────────────────
+function initGame() {
+  grid = Array.from({ length: ROWS }, () => new Uint8Array(COLS));
+  // Border walls
+  for (let c = 0; c < COLS; c++) { grid[0][c] = WALL; grid[ROWS-1][c] = WALL; }
+  for (let r = 0; r < ROWS; r++) { grid[r][0] = WALL; grid[r][COLS-1] = WALL; }
+
+  wallHistory = [];
+  powerups    = [];
+  scorePopups = [];
+
+  snake = {
+    x: Math.floor(COLS / 2),
+    y: Math.floor(ROWS / 2),
+    dir:     DIR.RIGHT,
+    nextDir: DIR.RIGHT
+  };
+
+  pacman = { x: 3, y: 3, lastDir: DIR.RIGHT };
+
+  score = 0; lives = 3; trapCount = 0;
+  ghostMode = false; ghostTicks = 0;
+  freezeMode = false; freezeTicks = 0;
+  deadTimer = 0;
+  lastSnakeMs = 0; lastPacMs = 0; lastPuSpawnMs = 0;
+  gameState = 'start';
+}
+
+// ── Grid Helpers ─────────────────────────────────────────────
+function inBounds(x, y)   { return x >= 0 && x < COLS && y >= 0 && y < ROWS; }
+function isPassable(x, y) { return inBounds(x, y) && grid[y][x] !== WALL; }
+
+// BFS flood-fill — returns count of cells reachable from (sx,sy).
+// The snake head cell is treated as impassable.
+function floodFill(sx, sy) {
+  if (!isPassable(sx, sy)) return 0;
+  const vis = new Uint8Array(COLS * ROWS);
+  const q   = [sy * COLS + sx];
+  vis[sy * COLS + sx] = 1;
+  let count = 1;
+  while (q.length) {
+    const idx = q.shift();
+    const cx = idx % COLS, cy = (idx / COLS) | 0;
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (!inBounds(nx, ny)) continue;
+      if (nx === snake.x && ny === snake.y) continue; // head blocks
+      if (vis[ny * COLS + nx]) continue;
+      if (!isPassable(nx, ny)) continue;
+      vis[ny * COLS + nx] = 1;
+      count++;
+      q.push(ny * COLS + nx);
+    }
+  }
+  return count;
+}
+
+function getOpenCells() {
+  const cells = [];
+  for (let r = 1; r < ROWS - 1; r++)
+    for (let c = 1; c < COLS - 1; c++)
+      if (grid[r][c] === EMPTY && !(c === snake.x && r === snake.y) && !(c === pacman.x && r === pacman.y))
+        cells.push([c, r]);
+  return cells;
+}
+
+function clearOldWalls(n) {
+  const count = Math.min(n, wallHistory.length);
+  for (let i = 0; i < count; i++) {
+    const [x, y] = wallHistory.shift();
+    if (grid[y][x] === WALL) grid[y][x] = EMPTY;
+  }
+}
+
+// ── Pac-Man AI (Pathfinder) ──────────────────────────────────
+function stepPacman() {
+  if (freezeMode) return;
+
+  let bestDir = null, bestArea = -1;
+  for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+    const nx = pacman.x + dx, ny = pacman.y + dy;
+    if (!isPassable(nx, ny)) continue;
+    if (nx === snake.x && ny === snake.y) continue;
+    const area = floodFill(nx, ny);
+    if (area > bestArea) { bestArea = area; bestDir = { dx, dy }; }
+  }
+
+  if (bestDir) {
+    pacman.x += bestDir.dx;
+    pacman.y += bestDir.dy;
+    pacman.lastDir = bestDir;
+  } else {
+    onPacmanTrapped();
+  }
+}
+
+function onPacmanTrapped() {
+  trapCount++;
+  const pts = 100 * trapCount;
+  score += pts;
+
+  // Score popup at Pac-Man location
+  scorePopups.push({
+    text: `+${pts}  TRAPPED!`,
+    x: pacman.x * CELL + CELL / 2,
+    y: pacman.y * CELL,
+    life: 90
+  });
+
+  if (trapCount >= 5) { gameState = 'win'; return; }
+
+  // Respawn far from snake
+  const open = getOpenCells();
+  if (open.length > 0) {
+    open.sort((a, b) => {
+      const da = Math.abs(a[0] - snake.x) + Math.abs(a[1] - snake.y);
+      const db = Math.abs(b[0] - snake.x) + Math.abs(b[1] - snake.y);
+      return db - da;
+    });
+    pacman.x = open[0][0];
+    pacman.y = open[0][1];
+  }
+
+  clearOldWalls(20);
+}
+
+// ── Snake Movement ───────────────────────────────────────────
+function stepSnake() {
+  // Apply queued direction — no 180° reversal
+  const nd = snake.nextDir;
+  if (!(nd.dx === -snake.dir.dx && nd.dy === -snake.dir.dy)) snake.dir = nd;
+
+  const nx = snake.x + snake.dir.dx;
+  const ny = snake.y + snake.dir.dy;
+
+  const atBorder  = nx <= 0 || nx >= COLS-1 || ny <= 0 || ny >= ROWS-1;
+  const atWall    = inBounds(nx, ny) && grid[ny][nx] === WALL;
+  const willCrash = atBorder || (atWall && !ghostMode);
+
+  if (willCrash) { onSnakeDeath(); return; }
+
+  // Collect power-up?
+  if (inBounds(nx, ny) && grid[ny][nx] >= PU_FREEZE) collectPowerup(nx, ny);
+
+  // Lay wall at departing cell
+  grid[snake.y][snake.x] = WALL;
+  wallHistory.push([snake.x, snake.y]);
+
+  snake.x = nx;
+  snake.y = ny;
+}
+
+function onSnakeDeath() {
+  lives--;
+  ghostMode  = false; ghostTicks  = 0;
+  freezeMode = false; freezeTicks = 0;
+  if (lives <= 0) { gameState = 'gameover'; return; }
+  gameState = 'dead';
+  deadTimer = 130;
+}
+
+function respawnSnake() {
+  const open = getOpenCells();
+  if (open.length > 0) {
+    const mid = (open.length / 2) | 0;
+    snake.x = open[mid][0];
+    snake.y = open[mid][1];
+  }
+  snake.dir = snake.nextDir = DIR.RIGHT;
+  gameState = 'playing';
+}
+
+// ── Power-Ups ────────────────────────────────────────────────
+function collectPowerup(x, y) {
+  const type = grid[y][x];
+  grid[y][x] = EMPTY;
+  powerups = powerups.filter(p => !(p.x === x && p.y === y));
+
+  if (type === PU_FREEZE) {
+    freezeMode  = true;
+    freezeTicks = 60 * 3;
+    scorePopups.push({ text: '❄ FREEZE!', x: x*CELL+CELL/2, y: y*CELL, life: 70 });
+  } else if (type === PU_GHOST) {
+    ghostMode  = true;
+    ghostTicks = 60 * 5;
+    scorePopups.push({ text: '👻 GHOST MODE!', x: x*CELL+CELL/2, y: y*CELL, life: 70 });
+  } else if (type === PU_ERASER) {
+    clearOldWalls(8);
+    score += 15;
+    scorePopups.push({ text: '🟢 WALLS ERASED', x: x*CELL+CELL/2, y: y*CELL, life: 70 });
+  }
+}
+
+function trySpawnPowerup(ts) {
+  if (powerups.length >= 3) return;
+  const open = getOpenCells();
+  if (open.length < 15) return;
+  const cell = open[(Math.random() * open.length) | 0];
+  const types = [PU_FREEZE, PU_GHOST, PU_ERASER];
+  const type  = types[(Math.random() * types.length) | 0];
+  grid[cell[1]][cell[0]] = type;
+  powerups.push({ x: cell[0], y: cell[1], type, born: ts });
+}
+
+function expirePowerups(ts) {
+  powerups = powerups.filter(p => {
+    if (ts - p.born > PU_LIFE_MS) {
+      if (grid[p.y][p.x] === p.type) grid[p.y][p.x] = EMPTY;
+      return false;
+    }
+    return true;
+  });
+}
+
+// ── Update ───────────────────────────────────────────────────
+function update(ts) {
+  if (gameState === 'start' || gameState === 'win' || gameState === 'gameover') return;
+
+  if (gameState === 'dead') {
+    deadTimer--;
+    if (deadTimer <= 0) respawnSnake();
+    return;
+  }
+
+  if (gameState === 'paused') return;
+
+  // Tick active effects
+  if (ghostMode)  { ghostTicks--;  if (ghostTicks  <= 0) ghostMode  = false; }
+  if (freezeMode) { freezeTicks--; if (freezeTicks <= 0) freezeMode = false; }
+
+  // Tick score popups
+  scorePopups = scorePopups.filter(p => --p.life > 0);
+
+  // Timed steps
+  if (ts - lastSnakeMs   >= SNAKE_MS)    { stepSnake();          lastSnakeMs   = ts; }
+  if (ts - lastPacMs     >= PAC_MS)      { stepPacman();         lastPacMs     = ts; }
+  if (ts - lastPuSpawnMs >= PU_SPAWN_MS) { trySpawnPowerup(ts);  lastPuSpawnMs = ts; }
+
+  expirePowerups(ts);
+}
+
+// ── Render ───────────────────────────────────────────────────
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function render(ts) {
+  // Background
+  ctx.fillStyle = '#06061a';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // ── Grid ──
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      const px = c * CELL, py = r * CELL;
+
+      if (cell === EMPTY) {
+        // Subtle grid dot
+        ctx.fillStyle = '#0d0d2a';
+        ctx.fillRect(px + CELL/2 - 1, py + CELL/2 - 1, 2, 2);
+
+      } else if (cell === WALL) {
+        // Pac-Man–style blue wall block
+        ctx.fillStyle = '#0d0dee';
+        ctx.fillRect(px, py, CELL, CELL);
+        ctx.fillStyle = '#1414ff';
+        ctx.fillRect(px + 2, py + 2, CELL - 4, CELL - 4);
+        // Shine lines (top + left)
+        ctx.fillStyle = '#3838ff';
+        ctx.fillRect(px + 2, py + 2, CELL - 4, 2);
+        ctx.fillRect(px + 2, py + 2, 2, CELL - 4);
+
+      } else {
+        // Power-up pellet
+        const pulse = 0.78 + 0.22 * Math.sin(ts * 0.005 + c * 0.4 + r * 0.3);
+        const [color, glow] =
+          cell === PU_FREEZE ? ['#ff3333', '#ff333388'] :
+          cell === PU_GHOST  ? ['#ffee00', '#ffee0088'] :
+                               ['#33ff77', '#33ff7788'];
+        ctx.save();
+        ctx.shadowColor = glow; ctx.shadowBlur = 10;
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(px + CELL / 2, py + CELL / 2, CELL / 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  // ── Snake head ──
+  drawSnakeHead(ts);
+
+  // ── Pac-Man ──
+  drawPacman(ts);
+
+  // ── Score popups ──
+  for (const p of scorePopups) {
+    const alpha = Math.min(1, p.life / 30);
+    const rise  = (90 - p.life) * 0.5;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ffee44';
+    ctx.font = 'bold 13px "Courier New"';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 8;
+    ctx.fillText(p.text, p.x, p.y - rise);
+    ctx.restore();
+  }
+
+  // ── HUD ──
+  drawHUD(ts);
+
+  // ── Overlays ──
+  ctx.textAlign = 'left';
+  if      (gameState === 'start')    drawOverlay('🐍  OUROBOROS  👻', 'Press SPACE or ENTER to start', '#ffcc00');
+  else if (gameState === 'paused')   drawOverlay('⏸  PAUSED',        'Press P to resume',              '#88aaff');
+  else if (gameState === 'dead')     drawOverlay('💥  OUCH!',         `${lives} ${lives===1?'life':'lives'} remaining…`, '#ff8844');
+  else if (gameState === 'win')      drawOverlay('🎉  YOU WIN!',      `Score: ${score}   —   Press R to play again`,    '#44ffaa');
+  else if (gameState === 'gameover') drawOverlay('💀  GAME OVER',     `Final score: ${score}   —   Press R to retry`,   '#ff4444');
+}
+
+function drawSnakeHead(ts) {
+  const sx = snake.x * CELL, sy = snake.y * CELL;
+
+  ctx.save();
+  if (ghostMode) {
+    const flicker = 0.6 + 0.4 * Math.sin(ts * 0.015);
+    ctx.globalAlpha  = flicker;
+    ctx.shadowColor  = '#aaffcc';
+    ctx.shadowBlur   = 16;
+    ctx.fillStyle    = '#aaffdd';
+  } else {
+    ctx.shadowColor  = '#00ff66';
+    ctx.shadowBlur   = 10;
+    ctx.fillStyle    = '#00ee55';
+  }
+  roundRect(sx + 2, sy + 2, CELL - 4, CELL - 4, 5);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Eyes (positioned by direction)
+  ctx.shadowBlur = 0;
+  ctx.fillStyle  = '#002200';
+  const cx = sx + CELL / 2, cy = sy + CELL / 2;
+  const { dx, dy } = snake.dir;
+  let e1x, e1y, e2x, e2y;
+  if      (dx ===  1) { e1x = cx+5; e1y = cy-4; e2x = cx+5; e2y = cy+4; }
+  else if (dx === -1) { e1x = cx-5; e1y = cy-4; e2x = cx-5; e2y = cy+4; }
+  else if (dy === -1) { e1x = cx-4; e1y = cy-5; e2x = cx+4; e2y = cy-5; }
+  else                { e1x = cx-4; e1y = cy+5; e2x = cx+4; e2y = cy+5; }
+  ctx.beginPath(); ctx.arc(e1x, e1y, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(e2x, e2y, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawPacman(ts) {
+  const cx = pacman.x * CELL + CELL / 2;
+  const cy = pacman.y * CELL + CELL / 2;
+  const r  = CELL / 2 - 2;
+  const mouth = 0.13 + 0.18 * Math.abs(Math.sin(ts * 0.009));
+
+  let angle = 0;
+  const d = pacman.lastDir;
+  if      (d.dx ===  1) angle = 0;
+  else if (d.dx === -1) angle = Math.PI;
+  else if (d.dy === -1) angle = -Math.PI / 2;
+  else                  angle = Math.PI / 2;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  if (freezeMode) {
+    ctx.shadowColor = '#88ccff'; ctx.shadowBlur = 12;
+    ctx.fillStyle   = '#aaddff';
+  } else {
+    ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 8;
+    ctx.fillStyle   = '#ffcc00';
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, r, mouth, Math.PI * 2 - mouth);
+  ctx.closePath();
+  ctx.fill();
+
+  // Eye
+  ctx.shadowBlur = 0;
+  ctx.fillStyle  = '#1a0000';
+  ctx.beginPath();
+  ctx.arc(r * 0.28, -r * 0.52, r * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHUD(ts) {
+  const hy = ROWS * CELL;
+  ctx.fillStyle = '#07071e';
+  ctx.fillRect(0, hy, CW, HUD_H);
+
+  // Top border line
+  ctx.strokeStyle = '#2222cc';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(CW, hy); ctx.stroke();
+
+  // Score
+  ctx.fillStyle = '#ffcc00';
+  ctx.font = 'bold 15px "Courier New"';
+  ctx.fillText(`SCORE  ${String(score).padStart(6, '0')}`, 12, hy + 22);
+
+  // Trap dots
+  ctx.fillStyle = '#555577';
+  ctx.font = '11px "Courier New"';
+  ctx.fillText('TRAPS', 12, hy + 44);
+  for (let i = 0; i < 5; i++) {
+    ctx.save();
+    if (i < trapCount) {
+      ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 8;
+      ctx.fillStyle = '#ffcc00';
+    } else {
+      ctx.fillStyle = '#222244';
+    }
+    ctx.beginPath();
+    ctx.arc(65 + i * 19, hy + 40, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Lives
+  ctx.fillStyle = '#ff4466';
+  ctx.font = 'bold 15px "Courier New"';
+  ctx.fillText(`♥ × ${lives}`, 175, hy + 22);
+
+  // Active effects
+  let ex = 265;
+  if (ghostMode) {
+    ctx.fillStyle = '#aaffcc';
+    ctx.font = '12px "Courier New"';
+    ctx.fillText(`👻 ${Math.ceil(ghostTicks / 60)}s`, ex, hy + 22);
+    ex += 75;
+  }
+  if (freezeMode) {
+    ctx.fillStyle = '#aaddff';
+    ctx.font = '12px "Courier New"';
+    ctx.fillText(`❄ ${Math.ceil(freezeTicks / 60)}s`, ex, hy + 22);
+  }
+
+  // Controls hint (right-aligned)
+  ctx.fillStyle = '#333366';
+  ctx.font = '10px "Courier New"';
+  const hint1 = '↑↓←→ or WASD · P pause · R restart';
+  ctx.fillText(hint1, CW - ctx.measureText(hint1).width - 10, hy + 22);
+  const hint2 = 'Your trail = walls · Trap Pac-Man 5× to win!';
+  ctx.fillText(hint2, CW - ctx.measureText(hint2).width - 10, hy + 38);
+}
+
+function drawOverlay(title, sub, color) {
+  ctx.fillStyle = 'rgba(2,2,18,0.84)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.textAlign  = 'center';
+  ctx.font       = 'bold 34px "Courier New"';
+  ctx.fillStyle  = color;
+  ctx.shadowColor = color; ctx.shadowBlur = 22;
+  ctx.fillText(title, CW / 2, CH / 2 - 22);
+
+  ctx.font       = '15px "Courier New"';
+  ctx.fillStyle  = '#9999bb';
+  ctx.shadowBlur = 0;
+  ctx.fillText(sub, CW / 2, CH / 2 + 20);
+  ctx.textAlign  = 'left';
+  ctx.shadowBlur = 0;
+}
+
+// ── Input ────────────────────────────────────────────────────
+const KEY_DIRS = {
+  ArrowUp: DIR.UP,    KeyW: DIR.UP,
+  ArrowDown: DIR.DOWN, KeyS: DIR.DOWN,
+  ArrowLeft: DIR.LEFT, KeyA: DIR.LEFT,
+  ArrowRight: DIR.RIGHT, KeyD: DIR.RIGHT
+};
+
+document.addEventListener('keydown', e => {
+  const block = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter','KeyW','KeyA','KeyS','KeyD'];
+  if (block.includes(e.code)) e.preventDefault();
+
+  if ((gameState === 'start') && (e.code === 'Space' || e.code === 'Enter')) {
+    gameState = 'playing'; return;
+  }
+  if ((gameState === 'win' || gameState === 'gameover') && e.code === 'KeyR') {
+    initGame(); gameState = 'playing'; return;
+  }
+  if (e.code === 'KeyP') {
+    if (gameState === 'playing') gameState = 'paused';
+    else if (gameState === 'paused') gameState = 'playing';
+    return;
+  }
+
+  if (KEY_DIRS[e.code] && gameState === 'playing') {
+    const nd = KEY_DIRS[e.code];
+    // Prevent 180° reversal
+    if (!(nd.dx === -snake.dir.dx && nd.dy === -snake.dir.dy)) {
+      snake.nextDir = nd;
+    }
+  }
+});
+
+// ── Game Loop ────────────────────────────────────────────────
+function loop(ts) {
+  update(ts);
+  render(ts);
+  requestAnimationFrame(loop);
+}
+
+initGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
