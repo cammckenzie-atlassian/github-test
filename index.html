@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiplayer Snake</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 16px;
+      gap: 20px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #f8fafc;
+    }
+
+    #status {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      min-height: 1.4em;
+    }
+
+    #game-area {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+
+    canvas {
+      display: block;
+      border: 2px solid #334155;
+      border-radius: 8px;
+      background: #1e293b;
+    }
+
+    #scoreboard {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+      min-width: 180px;
+    }
+
+    #scoreboard h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .player-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #0f172a;
+    }
+    .player-row:last-child { border-bottom: none; }
+
+    .player-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .player-name {
+      flex: 1;
+      font-size: 0.9rem;
+    }
+
+    .player-score {
+      font-weight: 700;
+      font-size: 1rem;
+      min-width: 28px;
+      text-align: right;
+    }
+
+    .player-status {
+      font-size: 0.75rem;
+      color: #ef4444;
+      min-width: 36px;
+      text-align: right;
+    }
+    .player-status.alive { color: transparent; }
+
+    #controls {
+      font-size: 0.8rem;
+      color: #475569;
+      text-align: center;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐍 Multiplayer Snake</h1>
+  <div id="status">Connecting to server…</div>
+
+  <div id="game-area">
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <div id="scoreboard">
+      <h2>Scores</h2>
+      <div id="player-list"></div>
+    </div>
+  </div>
+
+  <div id="controls">
+    Arrow keys or WASD to steer &nbsp;|&nbsp; Up to 4 players
+  </div>
+
+  <script>
+    const GRID_W = 30, GRID_H = 30;
+    const CELL = 20; // px
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const playerList = document.getElementById('player-list');
+
+    let myId = null;
+    let lastState = null;
+
+    // ── WebSocket ────────────────────────────────────────────────────────────
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}`);
+
+    ws.addEventListener('open', () => {
+      statusEl.textContent = 'Connected — waiting for game state…';
+    });
+
+    ws.addEventListener('close', () => {
+      statusEl.textContent = 'Disconnected from server.';
+    });
+
+    ws.addEventListener('message', e => {
+      const msg = JSON.parse(e.data);
+
+      if (msg.type === 'init') {
+        myId = msg.playerId;
+        statusEl.textContent = `You are Player ${myId}`;
+        return;
+      }
+
+      if (msg.type === 'state') {
+        lastState = msg;
+        render(msg);
+        updateScoreboard(msg);
+      }
+    });
+
+    // ── Input ────────────────────────────────────────────────────────────────
+    const KEY_MAP = {
+      ArrowUp: 'UP',    w: 'UP',    W: 'UP',
+      ArrowDown: 'DOWN', s: 'DOWN',  S: 'DOWN',
+      ArrowLeft: 'LEFT', a: 'LEFT',  A: 'LEFT',
+      ArrowRight: 'RIGHT', d: 'RIGHT', D: 'RIGHT',
+    };
+
+    document.addEventListener('keydown', e => {
+      const dir = KEY_MAP[e.key];
+      if (!dir) return;
+      e.preventDefault();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'direction', dir }));
+      }
+    });
+
+    // ── Rendering ────────────────────────────────────────────────────────────
+    function render(state) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // grid lines (subtle)
+      ctx.strokeStyle = '#263348';
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x <= GRID_W; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * CELL, 0);
+        ctx.lineTo(x * CELL, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= GRID_H; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * CELL);
+        ctx.lineTo(canvas.width, y * CELL);
+        ctx.stroke();
+      }
+
+      // food
+      for (const f of state.food) {
+        ctx.fillStyle = '#f87171';
+        ctx.beginPath();
+        ctx.arc(f.x * CELL + CELL / 2, f.y * CELL + CELL / 2, CELL / 2 - 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // snakes
+      for (const snake of state.snakes) {
+        if (!snake.alive) continue;
+        const color = snake.color;
+        const isMe = snake.id === myId;
+
+        for (let i = 0; i < snake.body.length; i++) {
+          const seg = snake.body[i];
+          const alpha = isMe ? 1 : 0.75;
+          ctx.globalAlpha = alpha;
+
+          if (i === 0) {
+            // head — slightly brighter / larger
+            ctx.fillStyle = color;
+            roundRect(ctx, seg.x * CELL + 1, seg.y * CELL + 1, CELL - 2, CELL - 2, 4);
+            ctx.fill();
+
+            // player number on head
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#0f172a';
+            ctx.font = `bold ${CELL * 0.55}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(snake.id, seg.x * CELL + CELL / 2, seg.y * CELL + CELL / 2);
+          } else {
+            ctx.fillStyle = color;
+            const pad = 2 + Math.min(i * 0.05, 2);
+            roundRect(ctx, seg.x * CELL + pad, seg.y * CELL + pad, CELL - pad * 2, CELL - pad * 2, 3);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function updateScoreboard(state) {
+      playerList.innerHTML = '';
+      const sorted = [...state.snakes].sort((a, b) => b.score - a.score);
+      for (const snake of sorted) {
+        const row = document.createElement('div');
+        row.className = 'player-row';
+
+        const dot = document.createElement('div');
+        dot.className = 'player-dot';
+        dot.style.background = snake.color;
+
+        const name = document.createElement('div');
+        name.className = 'player-name';
+        name.textContent = `P${snake.id}${snake.id === myId ? ' (you)' : ''}`;
+
+        const score = document.createElement('div');
+        score.className = 'player-score';
+        score.textContent = snake.score;
+
+        const status = document.createElement('div');
+        status.className = `player-status${snake.alive ? ' alive' : ''}`;
+        status.textContent = snake.alive ? '' : '💀';
+
+        row.appendChild(dot);
+        row.appendChild(name);
+        row.appendChild(score);
+        row.appendChild(status);
+        playerList.appendChild(row);
+      }
+    }
+
+    // idle canvas message
+    function drawIdle() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#334155';
+      ctx.font = '18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Waiting for server…', canvas.width / 2, canvas.height / 2);
+    }
+    drawIdle();
+  </script>
+</body>
+</html>
